@@ -1,15 +1,29 @@
-// server/controllers/reportController.js
 import Expense from "../models/Expense.js";
-import json2csv from "json2csv";
 
-// Generate CSV report for user expenses
+const escapeCsvValue = (value) => {
+  const normalizedValue = value instanceof Date
+    ? value.toISOString()
+    : value == null
+      ? ""
+      : String(value);
+
+  if (/[",\n]/.test(normalizedValue)) {
+    return `"${normalizedValue.replace(/"/g, '""')}"`;
+  }
+
+  return normalizedValue;
+};
+
 export const generateCSVReport = async (req, res) => {
   try {
-    const expenses = await Expense.find({ user: req.user._id });
+    const expenses = await Expense.find({ user: req.user._id }).lean();
     const fields = ["title", "amount", "type", "category", "date"];
-    const csv = json2csv.parse(expenses, { fields });
+    const rows = expenses.map((expense) =>
+      fields.map((field) => escapeCsvValue(expense[field]))
+    );
+    const csv = [fields.join(","), ...rows.map((row) => row.join(","))].join("\n");
 
-    res.header("Content-Type", "text/csv");
+    res.header("Content-Type", "text/csv; charset=utf-8");
     res.attachment("expense_report.csv");
     res.send(csv);
   } catch (err) {

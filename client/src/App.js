@@ -9,8 +9,13 @@ import Dashboard from "./pages/Dashboard";
 import Navbar from "./components/Navbar";
 
 function PrivateRoute({ children }) {
-  const { user } = useAuth();
-  return user ? children : <Navigate to="/login" />;
+  const { user, authReady } = useAuth();
+
+  if (!authReady) {
+    return <div className="p-6">Loading...</div>;
+  }
+
+  return user ? children : <Navigate to="/login" replace />;
 }
 
 function App() {

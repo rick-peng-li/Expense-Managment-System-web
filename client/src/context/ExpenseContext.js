@@ -1,4 +1,3 @@
-// src/context/ExpenseContext.js
 import { createContext, useContext, useEffect, useState } from "react";
 import API from "../utils/api";
 import { useAuth } from "./AuthContext";
@@ -6,31 +5,54 @@ import { useAuth } from "./AuthContext";
 const ExpenseContext = createContext();
 
 export const ExpenseProvider = ({ children }) => {
-  const { user } = useAuth();
+  const { user, authReady, clearUser } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch all expenses and credits
+  const handleUnauthorized = () => {
+    setExpenses([]);
+    setLoading(false);
+    clearUser();
+  };
+
   const fetchExpenses = async () => {
-    if (!user) return;
+    if (!authReady) {
+      return;
+    }
+
+    if (!user?.token) {
+      setExpenses([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+
     try {
       const res = await API.get("/expenses", {
         headers: { Authorization: `Bearer ${user.token}` },
       });
       setExpenses(res.data);
     } catch (err) {
+      if (err.response?.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       console.error("Failed to fetch expenses", err);
     }
+
     setLoading(false);
   };
 
-  // Add new expense or credit
   const addExpense = async (expenseData) => {
-    // Validate type
+    if (!user?.token) {
+      return { success: false, message: "Please login first." };
+    }
+
     if (!["expense", "credit"].includes(expenseData.type)) {
       return { success: false, message: "Type must be 'expense' or 'credit'" };
     }
+
     try {
       const res = await API.post("/expenses", expenseData, {
         headers: { Authorization: `Bearer ${user.token}` },
@@ -38,26 +60,37 @@ export const ExpenseProvider = ({ children }) => {
       setExpenses((prev) => [...prev, res.data]);
       return { success: true };
     } catch (err) {
+      if (err.response?.status === 401) {
+        handleUnauthorized();
+        return { success: false, message: "Login expired. Please login again." };
+      }
       console.error("Failed to add transaction", err);
       return { success: false, message: err.response?.data?.message || err.message };
     }
   };
 
-  // Delete expense/credit
   const deleteExpense = async (id) => {
+    if (!user?.token) {
+      return;
+    }
+
     try {
       await API.delete(`/expenses/${id}`, {
         headers: { Authorization: `Bearer ${user.token}` },
       });
-      setExpenses((prev) => prev.filter((e) => e._id !== id));
+      setExpenses((prev) => prev.filter((expense) => expense._id !== id));
     } catch (err) {
+      if (err.response?.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       console.error("Failed to delete transaction", err);
     }
   };
 
   useEffect(() => {
     fetchExpenses();
-  }, [user]);
+  }, [authReady, user]);
 
   return (
     <ExpenseContext.Provider value={{ expenses, loading, fetchExpenses, addExpense, deleteExpense }}>
